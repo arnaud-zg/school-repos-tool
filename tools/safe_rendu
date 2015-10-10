@@ -1,0 +1,114 @@
+#!/bin/bash
+##
+## One Lab to rule them all,
+## One Lab to find them;
+## One Lab to bring them all,
+## and in the light bind them.
+##
+##   Powered by LabAstek
+##
+
+#tools
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+STD="\033[0;39m"
+
+#user var
+login=""
+repository=""
+
+####################
+##   Users info   ##
+####################
+if [ $# -eq 2 ]
+then
+	login=$1
+	repository=$2
+else
+	printf "Login : "
+	read login
+	printf "\nRepository : "
+	read repository
+fi
+
+warning() {	printf "${RED}$1${STD}\n"; }
+
+validate() { printf "${GREEN}$1${STD}\n"; }
+
+# this function is used to get permission to clone the student repository.
+ssh_identity()
+{
+	printf "ssh identity : "
+	if [ -z "${SSH_AGENT_PID}" ]
+	then
+		echo "ssh-agent call"
+		eval `ssh-agent`
+	fi
+	if [ ! -f "${HOME}/.ssh/config" ]; then echo "Host git git.epitech.eu git.epitech.net
+     ForwardAgent yes" > "${HOME}/.ssh/config"
+    else
+	grep -q 'git.epitech.' "${HOME}/.ssh/config" || echo "Host git git.epitech.eu git.epitech.net
+     ForwardAgent yes" > "${HOME}/.ssh/config"
+    fi
+	ssh-add ~/.ssh/id_rsa
+	validate "done."
+}
+
+# turn in student work
+make_rendu()
+{
+	cd "${HOME}/rendu/$repository"
+	if [ $? -eq 1 ]
+	then
+		warning "[WARNING] Does your repository exist ?"
+		echo "(couldn't cd to ${HOME}/rendu/$repository)"
+		exit 1;
+	fi
+	rendu
+}
+
+# list all the file on the server
+checkout()
+{
+	mkdir -p /tmp/random;
+	cd /tmp/random;
+	rm -rf ${repository};
+    git clone "${login}@git.epitech.eu:/${login}/${repository}" > /dev/null;
+    cd ${repository};
+    echo "Theses files are on the server :";
+    ls -la | grep -v .git;
+    cd ..;
+	rm -rf ${repository};
+}
+
+# check acl rights
+moulinette_right()
+{
+	result="`blih -u $login repository getacl $repository`"
+	if [[ `echo $result | grep 401 | wc -l` -eq 1 ]]
+	then
+		warning "[WARNING] Please check your password and your login."
+	elif [[ `echo $result | grep ramassage-tek | wc -l` -eq 0 ]]
+	then
+		warning "[WARNING] The moulinette don't have any right !"
+		printf "Trying to set up the rights for $RED$repository$STD :\n"
+		blih -u $login repository setacl $repository ramassage-tek r
+		echo "Checking again acl rights..."
+	else
+		echo "The following rights are set :"
+		validate "$result"
+		exit 1;
+	fi
+	moulinette_right
+}
+
+ssh_identity
+make_rendu
+printf "\n=====\n"
+printf "Checking if $RED$repository$STD is correctly turned in by $RED$login$STD login"
+printf "\n=====\n\n"
+checkout
+printf "\n=====\n"
+printf "Checking if the right for the moulinette are set"
+printf "\n=====\n\n"
+moulinette_right
